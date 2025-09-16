@@ -1,6 +1,6 @@
 
 Description:
-PINNs Training is our main code.
+PINNs Training.py is our main code.
 I In our current Implementation, we are trying to incorporate Geometry latent representatoin to Amir CardioLab code which is in Amir Medhod.py
 
 
