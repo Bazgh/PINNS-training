@@ -1,7 +1,7 @@
 
 Description:
 PINNs Training.py is our main code.
-I In our current Implementation, we are trying to incorporate Geometry latent representatoin to Amir CardioLab code which is in Amir Medhod.py
+ In our current Implementation, we are trying to incorporate Geometry latent representatoin to Amir CardioLab code. Please see His original code in Amir method.py file.
 
 
 please find the dataset here:
