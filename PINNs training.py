@@ -117,7 +117,7 @@ def train(device,x,y,z,xb,yb,zb,ub,vb,wb,geom_latent,batchsize, learning_rate, e
         # dataset_bc = TensorDataset(x,y,xb,yb,ub,vb,dist)
 
         # dataloader = DataLoader(dataset, batch_size=batchsize,shuffle=True,num_workers = 0,drop_last = False )
-        dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=True, num_workers=0, drop_last=True)
+        dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=True, num_workers=4, drop_last=True)
         # dataloader_bc = DataLoader(dataset_bc, batch_size=batchsize,shuffle=True,num_workers = 0, drop_last = False )
     else:
         x = torch.Tensor(x)
@@ -906,7 +906,7 @@ bc_file_wall =  "wall.vtk"
 batchsize = 16  # 256 seems faster on gpu
 learning_rate = 1e-5  # 1e-4 / 5.  / 2.
 
-epochs = 5500
+epochs = 50
 
 Flag_pretrain = False  # True #If true reads the nets from last run
 
@@ -1001,7 +1001,9 @@ point_data.SetPoints(VTKpoints)
 xb_in = np.reshape(x_vtk_mesh, (np.size(x_vtk_mesh[:]), 1))
 yb_in = np.reshape(y_vtk_mesh, (np.size(y_vtk_mesh[:]), 1))
 zb_in = np.reshape(z_vtk_mesh, (np.size(z_vtk_mesh[:]), 1))
-
+xb_in=torch.Tensor(xb_in)
+yb_in=torch.Tensor(yb_in)
+zb_in=torch.Tensor(yb_in)
 print('Loading', bc_file_wall)
 reader = vtk.vtkPolyDataReader()
 reader.SetFileName(bc_file_wall)
@@ -1077,7 +1079,7 @@ ub = ub.reshape(-1, 1)  # need to reshape to get 2D array
 vb = vb.reshape(-1, 1)  # need to reshape to get 2D array
 wb = wb.reshape(-1, 1)  # need to reshape to get 2D array
 xb_inlet = xb_inlet.reshape(-1, 1)  # need to reshape to get 2D array
-xb_inlet = torch.from_numpy(xb_inlet.reshape(-1, 1)).float()
+#xb_inlet = torch.from_numpy(xb_inlet.reshape(-1, 1)).float()
 yb_inlet = yb_inlet.reshape(-1, 1)  # need to reshape to get 2D array
 zb_inlet = zb_inlet.reshape(-1, 1)  # need to reshape to get 2D array
 ub_inlet = ub_inlet.reshape(-1, 1)  # need to reshape to get 2D array
@@ -1106,5 +1108,18 @@ print('shape of ub', ub.shape)
 
 
 path = "Results/"
-train(device,x,y,z,xb,yb,zb,ub,vb,wb,geom_latent,batchsize, learning_rate, epochs, path, Flag_batch, Diff, rho,
-              Flag_BC_exact, Lambda_BC,nPt, T,xb_inlet,yb_inlet,zb_inlet,ub_inlet,vb_inlet,wb_inlet)
+#train(device,x,y,z,xb,yb,zb,ub,vb,wb,geom_latent,batchsize, learning_rate, epochs, path, Flag_batch, Diff, rho,
+              #Flag_BC_exact, Lambda_BC,nPt, T,xb_inlet,yb_inlet,zb_inlet,ub_inlet,vb_inlet,wb_inlet)
+def main():
+    # prepare tensors/args here (CPU tensors; move to GPU inside the loop)
+    # x, y, z, geom_latent_k, batchsize, num_epochs = ...
+    train(device, x, y, z, xb, yb, zb, ub, vb, wb, geom_latent, batchsize, learning_rate, epochs, path, Flag_batch,
+          Diff, rho,
+          Flag_BC_exact, Lambda_BC, nPt, T, xb_inlet, yb_inlet, zb_inlet, ub_inlet, vb_inlet, wb_inlet)
+
+if __name__ == "__main__":
+    # Windows uses spawn; this guard is REQUIRED
+    import torch.multiprocessing as mp
+    mp.set_start_method("spawn", force=True)  # optional but explicit
+    # mp.freeze_support()  # only needed for PyInstaller/EXE cases
+    main()
