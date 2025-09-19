@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import vtk
 import numpy as np
 import time
+from scipy.spatial import cKDTree
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -727,10 +728,37 @@ def train(device,x,y,z,xb,yb,zb,ub,vb,wb,geom_latent,batchsize, learning_rate, e
         out2_w = out2_w.view(len(out2_w), -1)
 
         loss_f = nn.MSELoss()
-        loss_noslip = loss_f(out1_u, torch.zeros_like(out1_u)) + loss_f(out1_v, torch.zeros_like(out1_v))
-        loss_inlet = loss_f(out2_u, ub_inlet) + loss_f(out2_v, torch.zeros_like(out2_v))
+        loss_noslip = loss_f(out1_u, torch.zeros_like(out1_u)) + loss_f(out1_v, torch.zeros_like(out1_v))+loss_f(out1_w, torch.zeros_like(out1_w))
+        loss_inlet = loss_f(out2_u, ub_inlet) + loss_f(out2_v, torch.zeros_like(out2_v))+loss_f(out2_w, torch.zeros_like(out2_w))
 
         return 1. * loss_noslip + loss_inlet
+
+    #find closest mesh point to sparse data ans force these points to have the same value as the sparse measured data
+
+    def precompute_nn_idx(mesh_xyz: np.ndarray, sparse_xyz: np.ndarray):
+    tree = cKDTree(mesh_xyz, leafsize=64, compact_nodes=True, balanced_tree=True)
+    d, idx = tree.query(sparse_xyz, k=1, workers=-1)  # idx: (M,)
+    return idx  # numpy int64
+
+    def data_loss(mesh_xyz,sparse_xyz,x, y,z,geom_latent_k,u_sparse,v_sparse,w_sparse)
+        
+        nn_index=precompute_nn_idx(mesh_xyz,sparse_xyz)
+        x = torch.FloatTensor(x[nn_index]).to(device)
+        y = torch.FloatTensor(y[nn_index]).to(device)
+        z=torch.FloatTensor(z[nn_index]).to(device)
+        geom_latent_k = torch.FloatTensor(geom_latent_k[nn_index]).to(device)
+        net_in = torch.cat((x, y,z,geom_latent_k), 1)
+        out1_u = net2_u(net_in)
+        out1_v = net2_v(net_in)
+        out1_w=net2_w(net_in)
+
+        out1_u = out1_u.view(len(out1_u), -1)
+        out1_v = out1_v.view(len(out1_v), -1)
+        out1_w = out1_w.view(len(out1_w), -1)
+        loss_f = nn.MSELoss()
+       
+        loss_data = loss_f(out1_u, u_sparse) + loss_f(out1_v, v_sparse)+loss_f(out1_w, w_sparse)
+
 
     # Main loop
 
@@ -940,6 +968,9 @@ reader = vtk.vtkXMLUnstructuredGridReader()
 reader.SetFileName(mesh_file)
 reader.Update()
 data_vtk = reader.GetOutput()
+pts_vtk = data_vtk.GetPoints()
+mesh_xyz = vtk_to_numpy(pts_vtk.GetData()).astype(np.float32)  # (N,3)
+
 n_points = data_vtk.GetNumberOfPoints()
 print('n_points of the mesh:', n_points)
 x_vtk_mesh = np.zeros((n_points, 1))
@@ -1026,6 +1057,27 @@ point_data.SetPoints(VTKpoints)
 xb_wall = np.reshape(x_vtk_mesh, (np.size(x_vtk_mesh[:]), 1))
 yb_wall = np.reshape(y_vtk_mesh, (np.size(y_vtk_mesh[:]), 1))
 zb_wall = np.reshape(z_vtk_mesh, (np.size(z_vtk_mesh[:]), 1))
+
+ ## load sparse data
+sparse_data="sample_2.vtk"
+print('Loading', sparse_data)
+reader = vtk.vtkPolyDataReader()
+reader.SetFileName(sparse_data)
+reader.Update()
+data_vtk = reader.GetOutput()
+pts_vtk = data_vtk.GetPoints()
+sparse_xyz = vtk_to_numpy(pts_vtk.GetData()).astype(np.float32)  # (M,3)
+# --- velocity vector named "flow" (M,3) ---
+flow_vtk = data_vtk.GetPointData().GetArray("flow")
+assert flow_vtk is not None and flow_vtk.GetNumberOfComponents() == 3, \
+       "Point-data array 'flow' (3 comps) not found."
+flow = vtk_to_numpy(flow_vtk).astype(np.float32)       # (M,3)
+
+# split components
+u_sparse = flow[:, 0:1]   # (M,1)
+v_sparse = flow[:, 1:1+1] # (M,1)
+w_sparse = flow[:, 2:3]   # (M,1)
+
 
 # u_in_BC = np.linspace(U_BC_in, U_BC_in, n_points) #constant uniform BC
 u_in_BC = (yb_in[:]) * (0.3 - yb_in[:]) / 0.0225 * U_BC_in  # parabolic
